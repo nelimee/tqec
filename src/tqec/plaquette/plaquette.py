@@ -1,6 +1,7 @@
 import cirq
 
 from tqec.circuit.schedule import ScheduledCircuit
+from tqec.clifford import Stabiliser, TableauWithCollapsingOperations
 from tqec.enums import PlaquetteOrientation, PlaquetteSide
 from tqec.exceptions import TQECException
 from tqec.plaquette.qubit import PlaquetteQubit
@@ -59,6 +60,13 @@ class Plaquette:
     @property
     def circuit(self) -> ScheduledCircuit:
         return self._circuit
+
+    @property
+    def tableau(self) -> TableauWithCollapsingOperations:
+        return TableauWithCollapsingOperations.from_circuit(self.circuit.raw_circuit)
+
+    def propagate_backwards_from_measurement(self) -> Stabiliser:
+        return self.tableau.inverse().output_stabiliser()
 
 
 class SquarePlaquette(Plaquette):
