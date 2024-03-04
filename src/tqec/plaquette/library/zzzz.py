@@ -12,7 +12,7 @@ class ZZZZMemoryPlaquette(PauliMemoryPlaquette):
         is_first_round: bool = False,
     ):
         super().__init__(
-            SquarePlaquetteQubits(),
+            SquarePlaquetteQubits().permute_data_qubits([0, 2, 1, 3]),
             "ZZZZ",
             schedule,
             include_detector,
