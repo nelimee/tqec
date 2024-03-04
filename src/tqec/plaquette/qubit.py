@@ -46,6 +46,9 @@ class PlaquetteQubits:
         yield from self.data_qubits
         yield from self.syndrome_qubits
 
+    def __len__(self) -> int:
+        return len(self.data_qubits) + len(self.syndrome_qubits)
+
     def to_grid_qubit(self) -> list[cirq.GridQubit]:
         # GridQubit are indexed as (row, col)
         return [q.to_grid_qubit() for q in self]
