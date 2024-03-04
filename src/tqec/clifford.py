@@ -86,10 +86,32 @@ class Stabiliser:
 class CollapsingOperation:
     def __init__(
         self,
+        stabiliser: Stabiliser,
+        is_creation: bool,
+    ) -> None:
+        """Create a collapsing operation representing either measuremements or resets.
+
+        This class represents what is called a collapsing operation in "Stim: a fast
+        stabilizer circuit simulator", Craig Gidney, https://arxiv.org/abs/2103.02202,
+        https://doi.org/10.22331/q-2021-07-06-497.
+        It is basically either a measurement or a reset, depending on the value of
+        ``is_creation``.
+
+        Args:
+            stabiliser: operator that is stabilised by the operation.
+            is_creation: True if the collapsing operation produces a state stabilised
+                by the stabiliser represented by the provided ``moment`` (i.e., a reset).
+                Else (i.e., in the case of a measurement), False.
+        """
+        self._stabiliser = stabiliser
+        self._is_creation = is_creation
+
+    @staticmethod
+    def from_moment(
         moment: cirq.Moment,
         qubit_map: ty.Mapping[cirq.Qid, int],
         is_creation: bool,
-    ) -> None:
+    ) -> CollapsingOperation:
         """Create a collapsing operation representing either a measuremement or a reset.
 
         This class represents what is called a collapsing operation in "Stim: a fast
@@ -124,9 +146,7 @@ class CollapsingOperation:
             # cirq can only represent Z-basis measurements and resets, so we know that
             # the stabilized state is the +1 eigenstate of Z.
             stabiliser_pauli[qubit_map[qubit]] = "Z"
-
-        self._stabiliser = Stabiliser(stabiliser_pauli)
-        self._is_creation = is_creation
+        return CollapsingOperation(Stabiliser(stabiliser_pauli), is_creation)
 
     def inverse(self, *, unsigned: bool = False) -> CollapsingOperation:
         """Inverse the collapsing operation, fliping the value of ``is_creation``."""
@@ -195,7 +215,7 @@ class TableauWithCollapsingOperations:
         ):
             if isinstance(element_with_maybe_resets, cirq.Moment):
                 operations.append(
-                    CollapsingOperation(
+                    CollapsingOperation.from_moment(
                         element_with_maybe_resets, qubit_map, is_creation=False
                     )
                 )
@@ -213,7 +233,9 @@ class TableauWithCollapsingOperations:
                     )
                 elif isinstance(element, cirq.Moment):
                     operations.append(
-                        CollapsingOperation(element, qubit_map, is_creation=True)
+                        CollapsingOperation.from_moment(
+                            element, qubit_map, is_creation=True
+                        )
                     )
         return TableauWithCollapsingOperations(
             operations, {i: q for q, i in qubit_map.items()}
