@@ -2,6 +2,11 @@ import cirq
 
 from tqec.circuit.operations.operation import make_detector
 from tqec.circuit.schedule import ScheduledCircuit
+from tqec.clifford import (
+    CollapsingOperation,
+    Stabiliser,
+    TableauWithCollapsingOperations,
+)
 from tqec.enums import PlaquetteOrientation
 from tqec.plaquette.plaquette import Plaquette
 from tqec.plaquette.qubit import (
@@ -33,6 +38,18 @@ class MeasurementPlaquette(Plaquette):
                     ]
                 ),
             ),
+        )
+
+    @property
+    def tableau(self) -> TableauWithCollapsingOperations:
+        return TableauWithCollapsingOperations(
+            [
+                CollapsingOperation(
+                    Stabiliser.from_pauli_string("Z" * len(self.qubits)),
+                    is_creation=False,
+                )
+            ],
+            {i: q for i, q in enumerate(self.qubits.to_grid_qubit())},
         )
 
 
