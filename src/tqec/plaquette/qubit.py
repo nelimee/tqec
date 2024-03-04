@@ -63,6 +63,21 @@ class PlaquetteQubits:
 
 class SquarePlaquetteQubits(PlaquetteQubits):
     def __init__(self):
+        """Represents the qubits of a square QEC plaquette.
+
+        By convention, the qubits are sorted as depicted in the text below:
+        ```text
+        |---------|
+        | 1     2 |
+        |         |
+        | 3     4 |
+        |---------|
+        ```
+
+        This ordering is not to be confused with the temporal ordering of multi-qubit
+        gates, for example in surface codes. It is a **qubit** ordering and has **no
+        relation** with a temporal ordering.
+        """
         super().__init__(
             [
                 PlaquetteQubit(Position(-1, -1)),
@@ -96,6 +111,28 @@ class RoundedPlaquetteQubits(PlaquetteQubits):
         return [RoundedPlaquetteQubits._POTENTIAL_DATA_QUBITS[i] for i in data_indices]
 
     def __init__(self, orientation: PlaquetteOrientation):
+        """Represents the qubits of a rounded QEC plaquette.
+
+        By convention, the qubits are sorted as depicted in the text below:
+        ```text
+        |---------|
+        | 1     2 |
+        |         |
+        | 3     4 |
+        |---------|
+        ```
+
+        This means that an instance of this class with a ``PlaquetteOrientation.UP`` 
+        orientation will have its two data qubits ordered as
+        ```text
+          -------
+         /       \\
+        | 1     2 |
+        |---------|
+        ```
+        as `3` (the index of the bottom-right qubit in the initial ordering) is the
+        lowest index (i.e., the number `1`) and `4` follows.
+        """
         super().__init__(
             RoundedPlaquetteQubits._get_qubits_on_side(orientation.to_plaquette_side()),
             [PlaquetteQubit(Position(0, 0))],
