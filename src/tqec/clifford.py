@@ -15,7 +15,7 @@ from tqec.exceptions import TQECException
 def _split_circuit_by_gates(
     circuit: cirq.Circuit,
     gate_type: type,
-) -> list[cirq.Circuit | cirq.Moment]:
+) -> ty.Iterator[cirq.Circuit | cirq.Moment]:
     """Split a Circuit instance.
 
     This function splits a Circuit according to a provided ``gate_type``.
@@ -42,7 +42,6 @@ def _split_circuit_by_gates(
             one operation that matches with the provided ``gate_type`` AND one that
             do not match.
     """
-    ret: list[cirq.Circuit | cirq.Moment] = []
     first_moment_of_section: int = 0
     for i, moment in enumerate(circuit.moments):
         is_optype_gate_type = [
@@ -59,14 +58,13 @@ def _split_circuit_by_gates(
             # that we split on, so the first cirq.Circuit instance is empty. As it
             # adds no value to include an empty Circuit, filter it out here.
             if i > 0:
-                ret.append(circuit[first_moment_of_section:i])
-            ret.append(circuit.moments[i])
+                yield circuit[first_moment_of_section:i]
+            yield circuit.moments[i]
             first_moment_of_section = i + 1
     # There might be some Moment instances left, in which case add
     # them to the circuit.
     if first_moment_of_section < len(circuit.moments):
-        ret.append(circuit[first_moment_of_section:])
-    return ret
+        yield circuit[first_moment_of_section:]
 
 
 @dataclass
