@@ -55,6 +55,18 @@ class XInitialisationPlaquette(Plaquette):
         )
         super().__init__(qubits, ScheduledCircuit(circuit))
 
+    @property
+    def tableau(self) -> TableauWithCollapsingOperations:
+        return TableauWithCollapsingOperations(
+            [
+                CollapsingOperation(
+                    Stabiliser.from_pauli_string("X" * len(self.qubits)),
+                    is_creation=True,
+                )
+            ],
+            {i: q for i, q in enumerate(self.qubits.to_grid_qubit())},
+        )
+
 
 class XSquareInitialisationPlaquette(XInitialisationPlaquette):
     def __init__(self) -> None:
