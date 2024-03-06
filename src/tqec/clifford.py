@@ -5,66 +5,11 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 import cirq
-import numpy
 import stim
 import stimcirq
 
+from tqec.circuit.operations.operation import STIM_TAG
 from tqec.exceptions import TQECException
-
-
-def _split_circuit_by_gates(
-    circuit: cirq.Circuit,
-    gate_type: type,
-) -> ty.Iterator[cirq.Circuit | cirq.Moment]:
-    """Split a Circuit instance.
-
-    This function splits a Circuit according to a provided ``gate_type``.
-
-    Its unique pre-condition is quite simple: any Moment in the provided ``circuit``
-    that contains an operation matching the provided ``gate_type`` should only
-    contain operations that match that same ``gate_type``.
-
-    Args:
-        circuit: the Circuit instance to split
-        gate_type: type inheriting from cirq.Gate that will be used to match
-            operations that should be considered as splitting the circuit. Any
-            operation ``op`` that checks ``isinstance(op.gate, gate_type)`` is
-            splitting the ``circuit``.
-
-    Returns:
-        a list of:
-        - ``cirq.Circuit`` instances, representing the split circuit portions not
-            containing any operation matching the provided ``gate_type``.
-        - ``cirq.Moment`` instances grouping the operations matching ``gate_type``.
-
-    Raises:
-        TQECError: if any cirq.Moment in the provided ``circuit`` contains at least
-            one operation that matches with the provided ``gate_type`` AND one that
-            do not match.
-    """
-    first_moment_of_section: int = 0
-    for i, moment in enumerate(circuit.moments):
-        is_optype_gate_type = [
-            isinstance(op.gate, gate_type) for op in moment.operations
-        ]
-        if any(is_optype_gate_type):
-            if not all(is_optype_gate_type):
-                raise TQECException(
-                    "Found a Moment with both 1) one operation with a "
-                    f"gate type of {gate_type} and 2) one operation with "
-                    f"a gate type that is not {gate_type}."
-                )
-            # If i == 0, this means that the first Moment instance contains gates
-            # that we split on, so the first cirq.Circuit instance is empty. As it
-            # adds no value to include an empty Circuit, filter it out here.
-            if i > 0:
-                yield circuit[first_moment_of_section:i]
-            yield circuit.moments[i]
-            first_moment_of_section = i + 1
-    # There might be some Moment instances left, in which case add
-    # them to the circuit.
-    if first_moment_of_section < len(circuit.moments):
-        yield circuit[first_moment_of_section:]
 
 
 @dataclass
@@ -94,7 +39,7 @@ class CollapsingOperation:
         This class represents what is called a collapsing operation in "Stim: a fast
         stabilizer circuit simulator", Craig Gidney, https://arxiv.org/abs/2103.02202,
         https://doi.org/10.22331/q-2021-07-06-497.
-        It is basically either a measurement or a reset, depending on the value of
+        It is basically either measurements or resets, depending on the value of
         ``is_creation``.
 
         Args:
@@ -200,45 +145,85 @@ class CollapsingOperation:
 class TableauWithCollapsingOperations:
     def __init__(
         self,
-        operations: ty.Sequence[stim.Tableau | CollapsingOperation],
+        operations: ty.Sequence[
+            stim.Tableau | CollapsingOperation | TableauWithCollapsingOperations
+        ],
         qubit_map: ty.Mapping[int, cirq.Qid],
+        repetitions: int = 1,
     ) -> None:
         self._operations = operations
         self._qubit_map = qubit_map
+        self._repetitions = repetitions
 
     @staticmethod
-    def from_circuit(circuit: cirq.Circuit) -> TableauWithCollapsingOperations:
+    def from_circuit(
+        circuit: cirq.Circuit, repetitions: int = 1
+    ) -> TableauWithCollapsingOperations:
         qubit_map = {q: i for i, q in enumerate(circuit.all_qubits())}
-        operations: list[stim.Tableau | CollapsingOperation] = []
-        for element_with_maybe_resets in _split_circuit_by_gates(
-            circuit, cirq.MeasurementGate
-        ):
-            if isinstance(element_with_maybe_resets, cirq.Moment):
+        operations: list[
+            list[cirq.Moment] | CollapsingOperation | TableauWithCollapsingOperations
+        ] = []
+        for moment in circuit.moments:
+            is_measurement = [
+                isinstance(op.gate, cirq.MeasurementGate) for op in moment.operations
+            ]
+            is_reset = [
+                isinstance(op.gate, cirq.ResetChannel) for op in moment.operations
+            ]
+            is_circuit_operation = [
+                isinstance(op.untagged, cirq.CircuitOperation)
+                for op in moment.operations
+            ]
+            # Moments composed of only measurements.
+            if any(is_measurement):
+                if not all(is_measurement):
+                    raise TQECException("Measurements should be in their own Moment.")
                 operations.append(
                     CollapsingOperation.from_moment(
-                        element_with_maybe_resets, qubit_map, is_creation=False
+                        moment, qubit_map, is_creation=False
                     )
                 )
+            # Moments composed of only resets.
+            elif any(is_reset):
+                if not all(is_reset):
+                    raise TQECException("Resets should be in their own Moment.")
+                operations.append(
+                    CollapsingOperation.from_moment(moment, qubit_map, is_creation=True)
+                )
+            # Moments composed of ONE CircuitOperation instance.
+            elif any(is_circuit_operation):
+                if len(moment.operations) > 1:
+                    raise TQECException(
+                        "CircuitOperation instance should be in its own Moment."
+                    )
+                op: cirq.CircuitOperation = moment.operations[0].untagged
+                operations.append(
+                    TableauWithCollapsingOperations.from_circuit(
+                        op.circuit.unfreeze(), int(op.repetitions)
+                    )
+                )
+            # Regular operations
+            else:
+                if not isinstance(operations[-1], list):
+                    operations.append(list())
+                operations[-1].append(moment)
+        tableau_operations: list[
+            CollapsingOperation | TableauWithCollapsingOperations | stim.Tableau
+        ] = []
+        for op in operations:
+            if not isinstance(op, list):
+                tableau_operations.append(op)
                 continue
-            for element in _split_circuit_by_gates(
-                element_with_maybe_resets, cirq.ResetChannel
-            ):
-                if isinstance(element, cirq.Circuit):
-                    operations.append(
-                        stim.Tableau.from_circuit(
-                            stimcirq.cirq_circuit_to_stim_circuit(
-                                element, qubit_to_index_dict=qubit_map
-                            )
-                        )
-                    )
-                elif isinstance(element, cirq.Moment):
-                    operations.append(
-                        CollapsingOperation.from_moment(
-                            element, qubit_map, is_creation=True
-                        )
-                    )
+            tableau = stim.Tableau.from_circuit(
+                stimcirq.cirq_circuit_to_stim_circuit(cirq.Circuit(op))
+            )
+            if len(tableau) != 0:
+                tableau_operations.append(tableau)
+
         return TableauWithCollapsingOperations(
-            operations, {i: q for q, i in qubit_map.items()}
+            tableau_operations,
+            {i: q for q, i in qubit_map.items()},
+            repetitions=repetitions,
         )
 
     def inverse(self) -> TableauWithCollapsingOperations:
@@ -246,7 +231,22 @@ class TableauWithCollapsingOperations:
             # TODO: check if we need the sign or not...
             [op.inverse() for op in reversed(self._operations)],
             self._qubit_map,
+            self._repetitions,
         )
+
+    def apply_on(self, stabilised_state: Stabiliser) -> Stabiliser:
+        # TODO: might be optimised by finding a fixed point if there is a repetition.
+        for _ in range(self._repetitions):
+            for op in self._operations:
+                if isinstance(op, CollapsingOperation):
+                    stabilised_state = op.apply_on(stabilised_state)
+                elif isinstance(op, stim.Tableau):
+                    stabilised_state.pauli = stabilised_state.pauli.after(
+                        op, targets=self._qubit_map.keys()
+                    )
+                elif isinstance(op, TableauWithCollapsingOperations):
+                    stabilised_state = op.apply_on(stabilised_state)
+        return stabilised_state
 
     @property
     def qubit_number(self) -> int:
@@ -258,12 +258,4 @@ class TableauWithCollapsingOperations:
         if input_stabiliser is None:
             input_stabiliser = Stabiliser(stim.PauliString(self.qubit_number))
 
-        for op in self._operations:
-            if isinstance(op, CollapsingOperation):
-                input_stabiliser = op.apply_on(input_stabiliser)
-            elif isinstance(op, stim.Tableau):
-                input_stabiliser.pauli = input_stabiliser.pauli.after(
-                    op, targets=self._qubit_map.keys()
-                )
-
-        return input_stabiliser
+        return self.apply_on(input_stabiliser)
