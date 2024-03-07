@@ -196,10 +196,10 @@ class TableauWithCollapsingOperations:
                     raise TQECException(
                         "CircuitOperation instance should be in its own Moment."
                     )
-                op: cirq.CircuitOperation = moment.operations[0].untagged
+                circuit_op: cirq.CircuitOperation = moment.operations[0].untagged
                 operations.append(
                     TableauWithCollapsingOperations.from_circuit(
-                        op.circuit.unfreeze(), int(op.repetitions)
+                        circuit_op.circuit.unfreeze(), int(circuit_op.repetitions)
                     )
                 )
             # Regular operations
