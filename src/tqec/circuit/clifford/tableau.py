@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import typing as ty
+from copy import deepcopy
 
 import cirq
 import stim
 import stimcirq
 from cirq.circuits.circuit_operation import INT_TYPE
 from tqec.circuit.clifford.collapsing_operation import CollapsingOperation
+from tqec.circuit.clifford.interaction_map import (
+    CollapsingOperationLocation,
+    CollapsingOperationsInteractionMap,
+)
 from tqec.circuit.clifford.stabiliser import Stabiliser
 from tqec.exceptions import TQECException
 
@@ -73,7 +78,7 @@ class TableauWithCollapsingOperations:
     def from_circuit(
         circuit: cirq.Circuit, repetitions: int = 1
     ) -> TableauWithCollapsingOperations:
-        qubit_map = {q: i for i, q in enumerate(circuit.all_qubits())}
+        qubit_map = {q: i for i, q in enumerate(sorted(circuit.all_qubits()))}
         operations: list[
             list[cirq.Moment] | CollapsingOperation | TableauWithCollapsingOperations
         ] = []
@@ -139,7 +144,67 @@ class TableauWithCollapsingOperations:
     def qubit_number(self) -> int:
         return max(self._qubit_map.keys()) + 1
 
-    def propagate_forward_each_creation(
-        self, include_stabilisers_at_destruction: bool = False
-    ):
-        pass
+    def get_interaction_map(
+        self, include_stabilisers: bool = True
+    ) -> CollapsingOperationsInteractionMap:
+        interaction_map = CollapsingOperationsInteractionMap()
+
+        # Populate the nodes with reset and measurement operations.
+        for time_coordinate, op in enumerate(self._operations):
+            if isinstance(op, CollapsingOperation):
+                locations = [
+                    CollapsingOperationLocation(time_coordinate, qubit_index)
+                    for qubit_index in op.effects.keys()
+                ]
+                interaction_map.add_operations(locations, op.is_creation)
+
+        # Back-propagate measurements to see which reset might interact with it.
+        # This is equivalent to propagating resets in the inverted circuit.
+        len_operations = len(self._operations)
+        qubit_number = self.qubit_number
+        inverted_operations = [op.inverse() for op in reversed(self._operations)]
+
+        for inverted_time_coordinate, inverted_op in enumerate(inverted_operations):
+            if isinstance(inverted_op, CollapsingOperation) and inverted_op.is_creation:
+                # We found a "creation" collapsing operation, which means a reset, but as we inverted
+                # the operations this is in fact a measurement. For all the measured qubits, evolve the
+                # stabiliser.
+                for qubit_index, stabiliser1q in inverted_op.effects.items():
+                    measurement = CollapsingOperationLocation(
+                        len_operations - 1 - inverted_time_coordinate, qubit_index
+                    )
+                    stabiliser = Stabiliser.from_1q_stabiliser(
+                        stabiliser1q, qubit_index, qubit_number
+                    )
+                    for t, iop in enumerate(
+                        inverted_operations[inverted_time_coordinate + 1 :]
+                    ):
+                        if isinstance(iop, CollapsingOperation):
+                            if iop.is_creation:
+                                continue
+                            resets = [
+                                CollapsingOperationLocation(
+                                    len_operations - 2 - inverted_time_coordinate - t,
+                                    qi,
+                                )
+                                for qi in iop.effects.keys()
+                                if stabiliser.acts_non_trivially_on_qubit(qi)
+                            ]
+                            # Apply the resets that have been reached:
+                            for reset in resets:
+                                stabiliser.pauli[reset.space_coordinate] = "I"
+                            interaction_map.add_connected_resets(
+                                measurement,
+                                resets,
+                                deepcopy(stabiliser) if include_stabilisers else None,
+                            )
+                        elif isinstance(iop, stim.Tableau):
+                            stabiliser.pauli = stabiliser.pauli.after(
+                                iop, targets=self._qubit_map.keys()
+                            )
+                        else:
+                            raise NotImplementedError(
+                                f"{type(iop).__name__} not supported yet."
+                            )
+
+        return interaction_map

@@ -17,5 +17,18 @@ class Stabiliser:
     def from_pauli_string(pauli_string: str) -> Stabiliser:
         return Stabiliser(stim.PauliString(pauli_string))
 
+    @staticmethod
+    def from_1q_stabiliser(
+        stabiliser: str, index: int, qubit_number: int
+    ) -> Stabiliser:
+        assert index < qubit_number
+        assert len(stabiliser) == 1
+        return Stabiliser.from_pauli_string(
+            "_" * (index) + stabiliser + "_" * (qubit_number - index - 1)
+        )
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.to_pauli_string()})"
+
+    def acts_non_trivially_on_qubit(self, qubit: int) -> bool:
+        return self.pauli[qubit] != 0

@@ -115,7 +115,8 @@ class CollapsingOperation:
                 if pauli != collapsing_pauli:
                     raise TQECException(
                         "Cannot apply a measurement-like collapsing operation "
-                        "on a non-commuting Pauli."
+                        f"on a non-commuting Pauli. Measurement in the {collapsing_pauli}"
+                        f"-basis applied on a stabiliser {pauli}."
                     )
                 # On a measurement, the resulting Pauli becomes the identity
                 result_pauli_string += "I"
