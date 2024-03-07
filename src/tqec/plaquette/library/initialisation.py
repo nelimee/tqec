@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import cirq
 
+from tqec.circuit.clifford.collapsing_operation import CollapsingOperation
+from tqec.circuit.clifford.stabiliser import Stabiliser
+from tqec.circuit.clifford.tableau import TableauWithCollapsingOperations
 from tqec.circuit.schedule import ScheduledCircuit
-from tqec.clifford import (
-    CollapsingOperation,
-    Stabiliser,
-    TableauWithCollapsingOperations,
-)
 from tqec.enums import PlaquetteOrientation
 from tqec.plaquette.plaquette import Plaquette
 from tqec.plaquette.qubit import (

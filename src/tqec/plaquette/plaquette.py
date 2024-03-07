@@ -1,8 +1,6 @@
-import cirq
-
+from tqec.circuit.clifford.stabiliser import Stabiliser
+from tqec.circuit.clifford.tableau import TableauWithCollapsingOperations
 from tqec.circuit.schedule import ScheduledCircuit
-from tqec.clifford import Stabiliser, TableauWithCollapsingOperations
-from tqec.enums import PlaquetteOrientation, PlaquetteSide
 from tqec.exceptions import TQECException
 from tqec.plaquette.qubit import PlaquetteQubits
 from tqec.position import Position
