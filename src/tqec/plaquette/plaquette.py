@@ -62,6 +62,3 @@ class Plaquette:
     @property
     def tableau(self) -> TableauWithCollapsingOperations:
         return TableauWithCollapsingOperations.from_circuit(self.circuit.raw_circuit)
-
-    def propagate_backwards_from_measurement(self) -> Stabiliser:
-        return self.tableau.inverse().output_stabiliser()

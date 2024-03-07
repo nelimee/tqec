@@ -139,14 +139,6 @@ class TableauWithCollapsingOperations:
     def qubit_number(self) -> int:
         return max(self._qubit_map.keys()) + 1
 
-    def output_stabiliser(
-        self, input_stabiliser: Stabiliser | None = None
-    ) -> Stabiliser:
-        if input_stabiliser is None:
-            input_stabiliser = Stabiliser(stim.PauliString(self.qubit_number))
-
-        return self.apply_on(input_stabiliser)
-
     def propagate_forward_each_creation(
         self, include_stabilisers_at_destruction: bool = False
     ):
