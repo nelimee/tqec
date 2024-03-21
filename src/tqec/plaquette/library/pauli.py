@@ -30,7 +30,10 @@ class PauliMemoryPlaquette(Plaquette):
             )
 
         circuit = make_pauli_syndrome_measurement_circuit(
-            syndrome_qubit, data_qubits, pauli_string
+            syndrome_qubit,
+            data_qubits,
+            pauli_string,
+            reset_syndrome_qubit=not is_first_round,
         )
         if include_detector:
             circuit.append(

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy
+import numpy.typing as npty
 import stim
 
 
@@ -32,3 +34,10 @@ class Stabiliser:
 
     def acts_non_trivially_on_qubit(self, qubit: int) -> bool:
         return self.pauli[qubit] != 0
+
+    def __len__(self) -> int:
+        return len(self.pauli)
+
+    def to_numpy_per_qubit(self) -> npty.NDArray[numpy.bool_]:
+        X, Z = self.pauli.to_numpy()
+        return numpy.column_stack((X, Z))

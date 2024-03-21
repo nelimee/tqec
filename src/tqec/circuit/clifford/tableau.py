@@ -153,10 +153,12 @@ class TableauWithCollapsingOperations:
         for time_coordinate, op in enumerate(self._operations):
             if isinstance(op, CollapsingOperation):
                 locations = [
-                    CollapsingOperationLocation(time_coordinate, qubit_index)
-                    for qubit_index in op.effects.keys()
+                    CollapsingOperationLocation(
+                        time_coordinate, qubit_index, basis=basis
+                    )
+                    for qubit_index, basis in op.effects.items()
                 ]
-                interaction_map.add_operations(locations, op.is_creation)
+                interaction_map.add_operations(locations, not op.is_creation)
 
         # Back-propagate measurements to see which reset might interact with it.
         # This is equivalent to propagating resets in the inverted circuit.
@@ -171,7 +173,9 @@ class TableauWithCollapsingOperations:
                 # stabiliser.
                 for qubit_index, stabiliser1q in inverted_op.effects.items():
                     measurement = CollapsingOperationLocation(
-                        len_operations - 1 - inverted_time_coordinate, qubit_index
+                        len_operations - 1 - inverted_time_coordinate,
+                        qubit_index,
+                        basis=stabiliser1q,
                     )
                     stabiliser = Stabiliser.from_1q_stabiliser(
                         stabiliser1q, qubit_index, qubit_number
@@ -186,18 +190,19 @@ class TableauWithCollapsingOperations:
                                 CollapsingOperationLocation(
                                     len_operations - 2 - inverted_time_coordinate - t,
                                     qi,
+                                    basis=s1q,
                                 )
-                                for qi in iop.effects.keys()
+                                for qi, s1q in iop.effects.items()
                                 if stabiliser.acts_non_trivially_on_qubit(qi)
                             ]
-                            # Apply the resets that have been reached:
-                            for reset in resets:
-                                stabiliser.pauli[reset.space_coordinate] = "I"
                             interaction_map.add_connected_resets(
                                 measurement,
                                 resets,
                                 deepcopy(stabiliser) if include_stabilisers else None,
                             )
+                            # Apply the resets that have been reached:
+                            for reset in resets:
+                                stabiliser.pauli[reset.space_coordinate] = "I"
                         elif isinstance(iop, stim.Tableau):
                             stabiliser.pauli = stabiliser.pauli.after(
                                 iop, targets=self._qubit_map.keys()

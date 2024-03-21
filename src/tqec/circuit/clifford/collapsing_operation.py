@@ -124,7 +124,7 @@ class CollapsingOperation:
         return Stabiliser.from_pauli_string(result_pauli_string)
 
     @property
-    def effects(self) -> dict[int, str]:
+    def effects(self) -> dict[int, ty.Literal["X", "Y", "Z"]]:
         return {
             i: p for i, p in enumerate(self.stabiliser.to_pauli_string()) if p != "I"
         }
