@@ -111,23 +111,6 @@ class Template:
         """
         pass
 
-    def to_dict(self) -> dict[str, ty.Any]:
-        """Returns a dict-like representation of the instance.
-
-        Used to implement to_json.
-        """
-        # self.__class__ is the type of the instance this method is called on, taking into
-        # account inheritance. So this is not always "Template" here, as a subclass of
-        # Template could use this method and self.__class__ would be this subclass type.
-        # This is intentional.
-        return {
-            "type": self.__class__.__name__,
-            "default_increments": {
-                "x": self._default_increments.x,
-                "y": self._default_increments.y,
-            },
-        }
-
     @property
     @abstractmethod
     def expected_plaquettes_number(self) -> int:
