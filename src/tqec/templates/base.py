@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import typing as ty
-from abc import abstractmethod
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
 
 import numpy
+import pydantic
+from pydantic import BaseModel
+from pydantic.dataclasses import dataclass
 
 from tqec.exceptions import TQECException
 from tqec.position import Displacement, Shape2D
 
 
-class Template:
+class Template(BaseModel, ABC):
+    tag: ty.Literal["Template"]
+    default_increments: Displacement
+
     def __init__(
         self,
         default_x_increment: int = 2,
@@ -28,9 +33,7 @@ class Template:
                 two plaquettes.
         """
         super().__init__()
-        self._default_increments = Displacement(
-            default_x_increment, default_y_increment
-        )
+        self.default_increments = Displacement(default_x_increment, default_y_increment)
 
     def _check_plaquette_number(
         self, plaquette_indices: ty.Sequence[int], expected_plaquettes_number: int
@@ -127,10 +130,10 @@ class Template:
         Returns:
             a displacement of the default increments in the x and y directions.
         """
-        return self._default_increments
+        return self.default_increments
 
 
-@dataclass
+@dataclass(frozen=True)
 class TemplateWithIndices:
     """A wrapper around a Template instance and the indices representing the plaquettes
     it should be instantiated with."""
@@ -151,3 +154,38 @@ class TemplateWithIndices:
                 "Cannot have negative plaquette indices. Found a negative index "
                 f"in {self.indices}."
             )
+
+
+"""Type representing the different instantiable templates.
+
+This type should be updated by each Template subclass that
+should be an instantiable pydantic model.
+See https://github.com/pydantic/pydantic/discussions/4208 for
+more information on why this is done like that.
+
+## Important note
+
+Due to the type system not being able to really provide an 
+"empty type union" (that can be populated by the subclasses), 
+the initial type is using typing.NoReturn 
+(https://docs.python.org/3/library/typing.html#typing.NoReturn)
+that should behave like the empty type. This means that the below 
+type is initialised to a type that is equivalent to `typing.Union[]`
+(i.e., no types), even if that is not a well formated type with
+Python's typing system.
+"""
+AnyTemplate = ty.Union[ty.NoReturn, ty.NoReturn]
+DiscriminatedAnyTemplate = ty.Annotated[
+    AnyTemplate, pydantic.Field(discriminator="tag")
+]
+
+
+def register_new_template(typ: type) -> None:
+    global AnyTemplate, DiscriminatedAnyTemplate
+    assert hasattr(
+        typ, "tag"
+    ), "Your template type should have a 'tag' attribute of type ty.Literal."
+    AnyTemplate = ty.Union[AnyTemplate, typ]
+    DiscriminatedAnyTemplate = ty.Annotated[
+        AnyTemplate, pydantic.Field(discriminator="tag")
+    ]

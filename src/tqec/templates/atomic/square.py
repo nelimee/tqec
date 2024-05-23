@@ -2,6 +2,7 @@ import typing as ty
 
 import numpy
 
+import tqec.templates.base
 from tqec.enums import CornerPositionEnum
 from tqec.position import Shape2D
 from tqec.templates.atomic.rectangle import AlternatingRectangleTemplate
@@ -10,6 +11,8 @@ from tqec.templates.scale import Dimension
 
 
 class AlternatingSquareTemplate(AlternatingRectangleTemplate):
+    tag: ty.Literal["AlternatingSquareTemplate"]
+
     def __init__(
         self,
         dimension: Dimension,
@@ -79,6 +82,10 @@ class AlternatingCornerSquareTemplate(Template):
         CornerPositionEnum.LOWER_RIGHT: lambda arr: arr[::-1, ::-1],
     }
 
+    tag: ty.Literal["AlternatingCornerSquareTemplate"]
+    dimension: Dimension
+    corner_position: CornerPositionEnum
+
     def __init__(
         self,
         dimension: Dimension,
@@ -133,8 +140,8 @@ class AlternatingCornerSquareTemplate(Template):
             default_x_increment=default_x_increment,
             default_y_increment=default_y_increment,
         )
-        self._dimension = dimension
-        self._corner_position = corner_position
+        self.dimension = dimension
+        self.corner_position = corner_position
 
     def instantiate(self, plaquette_indices: ty.Sequence[int]) -> numpy.ndarray:
         self._check_plaquette_number(plaquette_indices, 5)
@@ -142,7 +149,7 @@ class AlternatingCornerSquareTemplate(Template):
         ret = numpy.zeros(self.shape.to_numpy_shape(), dtype=int)
         # Fill ret as if it was in the upper-left corner and then correct
         ret[0, 0] = corner_plaquette
-        dimension = self._dimension.value
+        dimension = self.dimension.value
         for i in range(dimension):
             for j in range(dimension):
                 if i == j == 0:
@@ -158,16 +165,19 @@ class AlternatingCornerSquareTemplate(Template):
                     else:
                         ret[i, j] = p1_flipped
         # Correct ret and return
-        return self._TRANSFORMATIONS[self._corner_position](ret)
+        return self._TRANSFORMATIONS[self.corner_position](ret)
 
     @property
     def expected_plaquettes_number(self) -> int:
         return 5
 
     def scale_to(self, k: int) -> "AlternatingCornerSquareTemplate":
-        self._dimension.scale_to(k)
+        self.dimension.scale_to(k)
         return self
 
     @property
     def shape(self) -> Shape2D:
-        return Shape2D(self._dimension.value, self._dimension.value)
+        return Shape2D(self.dimension.value, self.dimension.value)
+
+
+tqec.templates.base.register_new_template(AlternatingSquareTemplate)

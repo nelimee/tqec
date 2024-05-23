@@ -2,6 +2,7 @@ import typing as ty
 
 import numpy
 
+import tqec.templates.base
 from tqec.exceptions import TQECException
 from tqec.position import Shape2D
 from tqec.templates.base import Template
@@ -9,6 +10,10 @@ from tqec.templates.scale import Dimension
 
 
 class AlternatingRectangleTemplate(Template):
+    tag: ty.Literal["AlternatingRectangleTemplate"]
+    width: Dimension
+    height: Dimension
+
     def __init__(
         self,
         width: Dimension,
@@ -57,8 +62,8 @@ class AlternatingRectangleTemplate(Template):
         """
 
         super().__init__(default_x_increment, default_y_increment)
-        self._width = width
-        self._height = height
+        self.width = width
+        self.height = height
 
     def instantiate(self, plaquette_indices: ty.Sequence[int]) -> numpy.ndarray:
         self._check_plaquette_number(plaquette_indices, 2)
@@ -73,13 +78,13 @@ class AlternatingRectangleTemplate(Template):
         return ret
 
     def scale_to(self, k: int) -> "AlternatingRectangleTemplate":
-        self._width.scale_to(k)
-        self._height.scale_to(k)
+        self.width.scale_to(k)
+        self.height.scale_to(k)
         return self
 
     @property
     def shape(self) -> Shape2D:
-        return Shape2D(self._width.value, self._height.value)
+        return Shape2D(self.width.value, self.height.value)
 
     @property
     def expected_plaquettes_number(self) -> int:
@@ -88,6 +93,9 @@ class AlternatingRectangleTemplate(Template):
 
 @ty.final
 class RawRectangleTemplate(Template):
+    tag: ty.Literal["RawRectangleTemplate"]
+    indices: list[list[int]]
+
     def __init__(
         self,
         indices: list[list[int]],
@@ -141,14 +149,19 @@ class RawRectangleTemplate(Template):
                 1  4
         """
         super().__init__(default_x_increment, default_y_increment)
+        self._check_input_indices(indices)
+        self.indices = indices
+
+    @staticmethod
+    def _check_input_indices(indices: list[list[int]]) -> None:
         if not indices or not indices[0]:
             raise TQECException(
-                f"You should provide at least one index to {self.__class__.__name__}."
+                "You should provide at least one index to RawRectangleTemplate."
             )
         line_lens = set(len(line) for line in indices)
         if len(line_lens) > 1:
             raise TQECException(
-                f"The 2-dimensional array provided to {self.__class__.__name__} should "
+                "The 2-dimensional array provided to RawRectangleTemplate should "
                 "be rectangular. Please provide an array with equally-sized rows."
             )
         all_indices: set[int] = set().union(*[set(line) for line in indices])
@@ -158,12 +171,11 @@ class RawRectangleTemplate(Template):
             min_index = min(min(row) for row in indices)
             max_index = max(max(row) for row in indices)
             raise TQECException(
-                f"{self.__class__.__name__} is expecting a 2-dimensional array of "
+                f"RawRectangleTemplate is expecting a 2-dimensional array of "
                 f"CONTIGUOUS indices starting at 0. You provided indices between "
                 f"{min_index} and {max_index} but the following indices were "
                 f"missing: {missing_expected_indices}."
             )
-        self._indices = indices
 
     def instantiate(self, plaquette_indices: ty.Sequence[int]) -> numpy.ndarray:
         # Warning: self.expected_plaquettes_number is only guaranteed to be correct
@@ -172,14 +184,14 @@ class RawRectangleTemplate(Template):
         try:
             # Use numpy indexing to instantiate the raw values.
             plaquette_indices_array = numpy.array(plaquette_indices, dtype=int)
-            indices = numpy.array(self._indices, dtype=int)
+            indices = numpy.array(self.indices, dtype=int)
             return plaquette_indices_array[indices]
         except IndexError:
             raise TQECException(
                 "RawRectangleTemplate instances should be constructed with 2-dimensional arrays "
                 "that contain indices that will index the plaquette_indices provided to "
                 "this method. The bigest index you provided at this instance creation is "
-                f"{max(max(index) for index in self._indices)} "
+                f"{max(max(index) for index in self.indices)} "
                 f"but you provided only {len(plaquette_indices)} plaquette indices "
                 "when calling this method."
             )
@@ -189,8 +201,12 @@ class RawRectangleTemplate(Template):
 
     @property
     def shape(self) -> Shape2D:
-        return Shape2D(len(self._indices[0]), len(self._indices))
+        return Shape2D(len(self.indices[0]), len(self.indices))
 
     @property
     def expected_plaquettes_number(self) -> int:
-        return max(max(line) for line in self._indices) + 1
+        return max(max(line) for line in self.indices) + 1
+
+
+tqec.templates.base.register_new_template(AlternatingRectangleTemplate)
+tqec.templates.base.register_new_template(RawRectangleTemplate)
