@@ -1,63 +1,64 @@
 import typing as ty
 
 import numpy
+import pydantic
 
-import tqec.templates.base
 from tqec.enums import CornerPositionEnum
-from tqec.position import Shape2D
+from tqec.position import Displacement, Shape2D
 from tqec.templates.atomic.rectangle import AlternatingRectangleTemplate
 from tqec.templates.base import Template
 from tqec.templates.scale import Dimension
 
 
 class AlternatingSquareTemplate(AlternatingRectangleTemplate):
-    tag: ty.Literal["AlternatingSquareTemplate"]
+    """Implements an atomic square template with alternating plaquettes.
+
+    Args:
+        dimension: width and height of the square template.
+        default_x_increment: default increment in the x direction between two plaquettes.
+        default_y_increment: default increment in the y direction between two plaquettes.
+
+    Example:
+        The following code:
+        .. code-block:: python
+
+            from tqec.templates.scale import Dimension, LinearFunction
+            from tqec.templates.atomic.square import AlternatingSquareTemplate
+            from tqec.display import display_template
+
+            dim = Dimension(2, LinearFunction(2, 0))
+            template = AlternatingSquareTemplate(dim)
+
+            print("Non-scaled template:")
+            display_template(template)
+            print("Scaled template:")
+            display_template(template.scale_to(1))
+
+        outputs ::
+
+            Non-scaled template:
+            1  2  1  2
+            2  1  2  1
+            1  2  1  2
+            2  1  2  1
+            Scaled template:
+            1  2
+            2  1
+    """
 
     def __init__(
         self,
         dimension: Dimension,
         default_x_increment: int = 2,
         default_y_increment: int = 2,
+        **kwargs,
     ) -> None:
-        """Implements an atomic square template with alternating plaquettes.
-
-        Args:
-            dimension: width and height of the square template.
-            default_x_increment: default increment in the x direction between two plaquettes.
-            default_y_increment: default increment in the y direction between two plaquettes.
-
-        Example:
-            The following code:
-            .. code-block:: python
-
-                from tqec.templates.scale import Dimension, LinearFunction
-                from tqec.templates.atomic.square import AlternatingSquareTemplate
-                from tqec.display import display_template
-
-                dim = Dimension(2, LinearFunction(2, 0))
-                template = AlternatingSquareTemplate(dim)
-
-                print("Non-scaled template:")
-                display_template(template)
-                print("Scaled template:")
-                display_template(template.scale_to(1))
-
-            outputs ::
-
-                Non-scaled template:
-                1  2  1  2
-                2  1  2  1
-                1  2  1  2
-                2  1  2  1
-                Scaled template:
-                1  2
-                2  1
-        """
         super().__init__(
-            dimension,
-            dimension,
+            width=dimension,
+            height=dimension,
             default_x_increment=default_x_increment,
             default_y_increment=default_y_increment,
+            **kwargs,
         )
 
 
@@ -66,8 +67,8 @@ class AlternatingCornerSquareTemplate(Template):
     the convention that the first plaquette provided to the method is the top-left
     one in the resulting array."""
 
-    _TRANSFORMATIONS: dict[
-        CornerPositionEnum, ty.Callable[[numpy.ndarray], numpy.ndarray]
+    _TRANSFORMATIONS: ty.ClassVar[
+        dict[CornerPositionEnum, ty.Callable[[numpy.ndarray], numpy.ndarray]]
     ] = {
         # By arbitrary convention, this class works as if the corner was on
         # the upper-left part of the corner and corrects the generated array
@@ -82,7 +83,6 @@ class AlternatingCornerSquareTemplate(Template):
         CornerPositionEnum.LOWER_RIGHT: lambda arr: arr[::-1, ::-1],
     }
 
-    tag: ty.Literal["AlternatingCornerSquareTemplate"]
     dimension: Dimension
     corner_position: CornerPositionEnum
 
@@ -92,6 +92,7 @@ class AlternatingCornerSquareTemplate(Template):
         corner_position: CornerPositionEnum,
         default_x_increment: int = 2,
         default_y_increment: int = 2,
+        **kwargs,
     ) -> None:
         """Implements an atomic square corner template with alternating plaquettes.
 
@@ -139,9 +140,10 @@ class AlternatingCornerSquareTemplate(Template):
         super().__init__(
             default_x_increment=default_x_increment,
             default_y_increment=default_y_increment,
+            dimension=dimension,
+            corner_position=corner_position,
+            **kwargs,
         )
-        self.dimension = dimension
-        self.corner_position = corner_position
 
     def instantiate(self, plaquette_indices: ty.Sequence[int]) -> numpy.ndarray:
         self._check_plaquette_number(plaquette_indices, 5)
@@ -178,6 +180,3 @@ class AlternatingCornerSquareTemplate(Template):
     @property
     def shape(self) -> Shape2D:
         return Shape2D(self.dimension.value, self.dimension.value)
-
-
-tqec.templates.base.register_new_template(AlternatingSquareTemplate)

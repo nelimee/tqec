@@ -2,11 +2,13 @@ import typing as ty
 
 import networkx as nx
 import numpy
+import pydantic
 
 from tqec.enums import CornerPositionEnum, TemplateRelativePositionEnum
 from tqec.exceptions import TQECException
 from tqec.position import Displacement, Position, Shape2D
 from tqec.templates.base import Template, TemplateWithIndices
+from tqec.templates.schemas import RelativePositionsModel
 
 
 def get_corner_position(
@@ -53,7 +55,18 @@ def get_corner_position(
 
 
 class ComposedTemplate(Template):
-    def __init__(self, templates: list[TemplateWithIndices]) -> None:
+    templates: list[Template]
+    relative_position_graph: nx.DiGraph
+
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    def __init__(
+        self,
+        templates: list[TemplateWithIndices],
+        default_x_increment: int = 2,
+        default_y_increment: int = 2,
+        **kwargs,
+    ) -> None:
         """Manages templates positioned relatively to each other.
 
         This class manages a list of user-provided templates and user-provided relative
@@ -100,17 +113,31 @@ class ComposedTemplate(Template):
             ValueError: if the templates provided have different default
                 increments.
         """
-        self._templates: list[Template] = []
-        self._relative_position_graph = nx.DiGraph()
+        super().__init__(default_x_increment=default_x_increment, default_y_increment=default_y_increment)
+        self.templates = []
+        self.relative_position_graph = nx.DiGraph()
         self._maximum_plaquette_mapping_index: int = 0
-        self._default_increments = Displacement(2, 2)
         self.add_templates(templates)
 
+    @pydantic.field_serializer("relative_position_graph")
+    @staticmethod
+    def relative_position_graph_serialization(
+        graph: nx.DiGraph, _info: pydantic.FieldSerializationInfo
+    ) -> RelativePositionsModel:
+        return RelativePositionsModel.from_networkx(graph)
+
+    @pydantic.field_validator("relative_position_graph", mode="before")
+    @classmethod
+    def relative_position_graph_deserialization(
+        cls, relative_positions: RelativePositionsModel, _info: pydantic.ValidationInfo
+    ) -> nx.DiGraph:
+        return relative_positions.to_networkx()
+
     def _check_template_id(self, template_id: int) -> None:
-        if template_id >= len(self._templates):
+        if template_id >= len(self.templates):
             raise TQECException(
                 f"Asking for element identified by {template_id} when only "
-                f"{len(self._templates)} templates have been added to "
+                f"{len(self.templates)} templates have been added to "
                 f"the {self.__class__.__name__} instance."
             )
 
@@ -132,17 +159,15 @@ class ComposedTemplate(Template):
             ValueError: if the template to insert has different default
                 increments.
         """
-        if len(self._templates) == 0:
-            self._default_increments = template_to_insert.template.get_increments()
-        elif self._default_increments != template_to_insert.template.get_increments():
+        if self.default_increments != template_to_insert.template.get_increments():
             raise ValueError(
                 f"Template {template_to_insert.template}"
                 + " has different default increments than the other templates."
             )
-        template_id: int = len(self._templates)
+        template_id: int = len(self.templates)
         indices = template_to_insert.indices
-        self._templates.append(template_to_insert.template)
-        self._relative_position_graph.add_node(template_id, plaquette_indices=indices)
+        self.templates.append(template_to_insert.template)
+        self.relative_position_graph.add_node(template_id, plaquette_indices=indices)
         self._maximum_plaquette_mapping_index = max(
             [self._maximum_plaquette_mapping_index] + indices
         )
@@ -238,12 +263,12 @@ class ComposedTemplate(Template):
         self._check_template_id(anchor_id)
         # Add 2 symmetric edges on the graph to encode the relative positioning information
         # provided by the user by calling this methods.
-        self._relative_position_graph.add_edge(
+        self.relative_position_graph.add_edge(
             anchor_id,
             template_id,
             relative_position=(anchor_corner, template_corner),
         )
-        self._relative_position_graph.add_edge(
+        self.relative_position_graph.add_edge(
             template_id,
             anchor_id,
             relative_position=(template_corner, anchor_corner),
@@ -273,9 +298,9 @@ class ComposedTemplate(Template):
         src: int
         dest: int
         # Compute the upper-left (ul) position of all the templates
-        for src, dest in nx.bfs_edges(self._relative_position_graph, 0):
+        for src, dest in nx.bfs_edges(self.relative_position_graph, 0):
             relative_position: tuple[CornerPositionEnum, CornerPositionEnum] | None = (
-                self._relative_position_graph.get_edge_data(
+                self.relative_position_graph.get_edge_data(
                     src, dest
                 ).get("relative_position")
             )
@@ -286,8 +311,8 @@ class ComposedTemplate(Template):
             # for dest.
             # ul_positions[src] is guaranteed to exist due to the BFS exploration order.
             src_ul_position = ul_positions[src]
-            src_shape = self._templates[src].shape
-            dest_shape = self._templates[dest].shape
+            src_shape = self.templates[src].shape
+            dest_shape = self.templates[dest].shape
 
             src_corner: CornerPositionEnum
             dest_corner: CornerPositionEnum
@@ -331,7 +356,7 @@ class ComposedTemplate(Template):
         # tulx: template upper-left
         for tid, tul in ul_positions.items():
             # tshape: template shape
-            tshape = self._templates[tid].shape
+            tshape = self.templates[tid].shape
             ul = Position(min(ul.x, tul.x), min(ul.y, tul.y))
             br = Position(max(br.x, tul.x + tshape.x), max(br.y, tul.y + tshape.y))
         return ul, br
@@ -368,13 +393,13 @@ class ComposedTemplate(Template):
         # tid: template id
         # tul: template upper-left
         for tid, tul in ul_positions.items():
-            template = self._templates[tid]
+            template = self.templates[tid]
             # tshapex: template shape x coordinate
             # tshapey: template shape y coordinate
             tshapey, tshapex = template.shape.to_numpy_shape()
             plaquette_indices: list[int] = [
                 indices_map[i]
-                for i in self._relative_position_graph.nodes[tid]["plaquette_indices"]
+                for i in self.relative_position_graph.nodes[tid]["plaquette_indices"]
             ]
             # Subtracting bbul (upper-left bounding box position) from each coordinate to stick
             # the represented code to the axes and avoid having negative indices.
@@ -423,16 +448,6 @@ class ComposedTemplate(Template):
             )
         return self._build_array((0, *plaquette_indices))
 
-    @property
-    def default_increments(self) -> Displacement:
-        """Get the increments between plaquettes of the template.
-
-        Returns:
-            a Displacement(x increment, y increment) representing the increments
-            between plaquettes of the template.
-        """
-        return self._default_increments
-
     def scale_to(self, k: int) -> "ComposedTemplate":
         """Scales all the scalable component templates to the given scale ``k``.
 
@@ -446,7 +461,7 @@ class ComposedTemplate(Template):
         Returns:
             ``self``, once scaled.
         """
-        for t in self._templates:
+        for t in self.templates:
             t.scale_to(k)
         return self
 
@@ -460,4 +475,4 @@ class ComposedTemplate(Template):
 
     @property
     def is_empty(self) -> bool:
-        return len(self._templates) == 0
+        return len(self.templates) == 0

@@ -2,11 +2,13 @@ import typing as ty
 
 import numpy
 
-from tqec.position import Shape2D
+from tqec.position import Displacement, Shape2D
 from tqec.templates.base import Template
 
 
 class StackedTemplate(Template):
+    stack: list[Template]
+
     def __init__(
         self, default_x_increment: int = 2, default_y_increment: int = 2
     ) -> None:
@@ -46,7 +48,7 @@ class StackedTemplate(Template):
         that hides the bottom one.
         """
         super().__init__(default_x_increment, default_y_increment)
-        self._stack: list[Template] = []
+        self.stack = []
 
     def push_template_on_top(
         self,
@@ -58,21 +60,21 @@ class StackedTemplate(Template):
 
         :raises TQECException: if any of the specified offset coordinates is not positive.
         """
-        self._stack.append(template)
+        self.stack.append(template)
 
     def pop_template_from_top(self) -> Template:
         """Removes the top-most template from the stack."""
-        return self._stack.pop()
+        return self.stack.pop()
 
     def scale_to(self, k: int) -> "StackedTemplate":
-        for t in self._stack:
+        for t in self.stack:
             t.scale_to(k)
         return self
 
     @property
     def shape(self) -> Shape2D:
         shapex, shapey = 0, 0
-        for template in self._stack:
+        for template in self.stack:
             tshape = template.shape
             shapex = max(shapex, tshape.x)
             shapey = max(shapey, tshape.y)
@@ -80,12 +82,12 @@ class StackedTemplate(Template):
 
     @property
     def expected_plaquettes_number(self) -> int:
-        return sum(t.expected_plaquettes_number for t in self._stack)
+        return sum(t.expected_plaquettes_number for t in self.stack)
 
     def instantiate(self, plaquette_indices: ty.Sequence[int]) -> numpy.ndarray:
         arr = numpy.zeros(self.shape.to_numpy_shape(), dtype=int)
         first_non_used_plaquette_index: int = 0
-        for template in self._stack:
+        for template in self.stack:
             istart = first_non_used_plaquette_index
             istop = istart + template.expected_plaquettes_number
             indices = [plaquette_indices[i] for i in range(istart, istop)]

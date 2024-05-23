@@ -13,13 +13,10 @@ from tqec.position import Displacement, Shape2D
 
 
 class Template(BaseModel, ABC):
-    tag: ty.Literal["Template"]
     default_increments: Displacement
 
     def __init__(
-        self,
-        default_x_increment: int = 2,
-        default_y_increment: int = 2,
+        self, default_x_increment: int = 2, default_y_increment: int = 2, **kwargs
     ) -> None:
         """Base class for all the templates.
 
@@ -32,8 +29,10 @@ class Template(BaseModel, ABC):
             default_y_increment: default increment in the y direction between
                 two plaquettes.
         """
-        super().__init__()
-        self.default_increments = Displacement(default_x_increment, default_y_increment)
+        super().__init__(
+            default_increments=Displacement(default_x_increment, default_y_increment),
+            **kwargs,
+        )
 
     def _check_plaquette_number(
         self, plaquette_indices: ty.Sequence[int], expected_plaquettes_number: int
@@ -154,38 +153,3 @@ class TemplateWithIndices:
                 "Cannot have negative plaquette indices. Found a negative index "
                 f"in {self.indices}."
             )
-
-
-"""Type representing the different instantiable templates.
-
-This type should be updated by each Template subclass that
-should be an instantiable pydantic model.
-See https://github.com/pydantic/pydantic/discussions/4208 for
-more information on why this is done like that.
-
-## Important note
-
-Due to the type system not being able to really provide an 
-"empty type union" (that can be populated by the subclasses), 
-the initial type is using typing.NoReturn 
-(https://docs.python.org/3/library/typing.html#typing.NoReturn)
-that should behave like the empty type. This means that the below 
-type is initialised to a type that is equivalent to `typing.Union[]`
-(i.e., no types), even if that is not a well formated type with
-Python's typing system.
-"""
-AnyTemplate = ty.Union[ty.NoReturn, ty.NoReturn]
-DiscriminatedAnyTemplate = ty.Annotated[
-    AnyTemplate, pydantic.Field(discriminator="tag")
-]
-
-
-def register_new_template(typ: type) -> None:
-    global AnyTemplate, DiscriminatedAnyTemplate
-    assert hasattr(
-        typ, "tag"
-    ), "Your template type should have a 'tag' attribute of type ty.Literal."
-    AnyTemplate = ty.Union[AnyTemplate, typ]
-    DiscriminatedAnyTemplate = ty.Annotated[
-        AnyTemplate, pydantic.Field(discriminator="tag")
-    ]

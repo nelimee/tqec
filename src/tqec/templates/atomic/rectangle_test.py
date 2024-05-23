@@ -1,5 +1,6 @@
 import numpy
 import pytest
+
 from tqec.exceptions import TQECException
 from tqec.templates.atomic.rectangle import (
     AlternatingRectangleTemplate,

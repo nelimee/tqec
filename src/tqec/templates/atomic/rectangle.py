@@ -2,15 +2,13 @@ import typing as ty
 
 import numpy
 
-import tqec.templates.base
 from tqec.exceptions import TQECException
-from tqec.position import Shape2D
+from tqec.position import Displacement, Shape2D
 from tqec.templates.base import Template
 from tqec.templates.scale import Dimension
 
 
 class AlternatingRectangleTemplate(Template):
-    tag: ty.Literal["AlternatingRectangleTemplate"]
     width: Dimension
     height: Dimension
 
@@ -20,6 +18,7 @@ class AlternatingRectangleTemplate(Template):
         height: Dimension,
         default_x_increment: int = 2,
         default_y_increment: int = 2,
+        **kwargs,
     ) -> None:
         """Implements an atomic rectangular template with alternating plaquettes.
 
@@ -60,10 +59,13 @@ class AlternatingRectangleTemplate(Template):
                 2  1
                 1  2
         """
-
-        super().__init__(default_x_increment, default_y_increment)
-        self.width = width
-        self.height = height
+        super().__init__(
+            default_x_increment=default_x_increment,
+            default_y_increment=default_y_increment,
+            width=width,
+            height=height,
+            **kwargs,
+        )
 
     def instantiate(self, plaquette_indices: ty.Sequence[int]) -> numpy.ndarray:
         self._check_plaquette_number(plaquette_indices, 2)
@@ -93,7 +95,6 @@ class AlternatingRectangleTemplate(Template):
 
 @ty.final
 class RawRectangleTemplate(Template):
-    tag: ty.Literal["RawRectangleTemplate"]
     indices: list[list[int]]
 
     def __init__(
@@ -101,6 +102,7 @@ class RawRectangleTemplate(Template):
         indices: list[list[int]],
         default_x_increment: int = 2,
         default_y_increment: int = 2,
+        **kwargs,
     ) -> None:
         """
         Implements an atomic rectangular template with user-provided
@@ -148,9 +150,12 @@ class RawRectangleTemplate(Template):
                 2  2
                 1  4
         """
-        super().__init__(default_x_increment, default_y_increment)
-        self._check_input_indices(indices)
-        self.indices = indices
+        RawRectangleTemplate._check_input_indices(indices)
+        super().__init__(
+            default_x_increment=default_x_increment,
+            default_y_increment=default_y_increment,
+            indices=indices,
+        )
 
     @staticmethod
     def _check_input_indices(indices: list[list[int]]) -> None:
@@ -206,7 +211,3 @@ class RawRectangleTemplate(Template):
     @property
     def expected_plaquettes_number(self) -> int:
         return max(max(line) for line in self.indices) + 1
-
-
-tqec.templates.base.register_new_template(AlternatingRectangleTemplate)
-tqec.templates.base.register_new_template(RawRectangleTemplate)

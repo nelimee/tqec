@@ -54,7 +54,7 @@ def display_templates_svg(
     """
     if len(plaquette_indices) == 0:
         plaquette_indices = tuple(range(1, templates.expected_plaquettes_number + 1))
-    template_list = templates._templates
+    template_list = templates.templates
     ul_positions = templates._compute_ul_absolute_position()
     box = templates._get_bounding_box_from_ul_positions(ul_positions)
     box_width: float = box[1].x - box[0].x
@@ -107,7 +107,7 @@ def display_templates_svg(
         ul_position = ul_positions[i]
         indices = [
             plaquette_indices[k]
-            for k in templates._relative_position_graph.nodes[i]["plaquette_indices"]
+            for k in templates.relative_position_graph.nodes[i]["plaquette_indices"]
         ]
         arr = template.instantiate(indices)
         outer_rects.extend(
