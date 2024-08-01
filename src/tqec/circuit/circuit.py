@@ -18,7 +18,7 @@ from tqec.templates.base import Template
 def generate_circuit(
     template: Template,
     plaquettes: Plaquettes,
-) -> cirq.Circuit:
+) -> ScheduledCircuit:
     """Generate a quantum circuit from a template and its plaquettes
 
     This is one of the core methods of the `tqec` package. It generates a quantum circuit
@@ -79,7 +79,7 @@ def generate_circuit_from_instantiation(
     plaquette_array: npt.NDArray[numpy.int_],
     plaquettes: Plaquettes,
     increments: Displacement,
-) -> cirq.Circuit:
+) -> ScheduledCircuit:
     """Generate a quantum circuit from an array of plaquette indices and the
     associated plaquettes
 

@@ -95,6 +95,16 @@ class ScheduledCircuit:
         self._schedule: list[int]
         self._set_schedule(schedule)
 
+    def __repr__(self) -> str:
+        return {"circuit": self._raw_circuit, "schedule": self._schedule}.__repr__()
+
+    def __eq__(self, value: object) -> bool:
+        return (
+            isinstance(value, ScheduledCircuit)
+            and self.schedule == value.schedule
+            and self.raw_circuit == value.raw_circuit
+        )
+
     @staticmethod
     def _check_input_validity(circuit: cirq.Circuit, schedule: list[int]) -> None:
         """Asserts that the given inputs are valid to construct a ScheduledCircuit instance.
@@ -397,6 +407,16 @@ class ScheduledCircuit:
                     f"Trying to add:\n{moment}."
                 ) from e
 
+    def __iadd__(self, rhs: ScheduledCircuit) -> ScheduledCircuit:
+        self._raw_circuit += rhs._raw_circuit
+        self._schedule += [s + self._schedule[-1] for s in rhs._schedule]
+        return self
+
+    def __add__(self, rhs: ScheduledCircuit) -> ScheduledCircuit:
+        ret = deepcopy(self)
+        ret += rhs
+        return ret
+
 
 class ScheduledCircuits:
     def __init__(self, circuits: list[ScheduledCircuit]) -> None:
@@ -447,18 +467,20 @@ class ScheduledCircuits:
     def number_of_circuits(self) -> int:
         return len(self._circuits)
 
-    def collect_moments(self) -> list[cirq.Moment]:
+    def collect_moments(self) -> tuple[int, list[cirq.Moment]]:
         """Collect all the moments that can be collected.
 
-        This method collects and returns a list of all the moments that should be scheduled next.
+        This method collects and returns a list of all the moments that should be
+        scheduled next, as well as the schedule index associated with the returned
+        moments.
 
-        Due to the internal condition of ScheduledCircuit that no schedule is lower than
-        ScheduledCircuit.VIRTUAL_MOMENT_SCHEDULE, virtual Moment instances are always scheduled first
-        when encountered.
+        Due to the internal condition of `ScheduledCircuit` that no schedule is lower
+        than `ScheduledCircuit.VIRTUAL_MOMENT_SCHEDULE`, virtual Moment instances are
+        always scheduled first when encountered.
 
         Returns:
-            a list of Moment instances that should be added next to the QEC
-            circuit.
+            a tuple containing the current schedule index and a list of Moment
+            instances that should be added next to the QEC circuit.
         """
         circuit_indices_organised_by_schedule: dict[int, list[int]] = dict()
         for circuit_index in range(self.number_of_circuits):
@@ -469,15 +491,12 @@ class ScheduledCircuits:
                 circuit_index
             )
 
-        if not circuit_indices_organised_by_schedule:
-            return list()
-
         minimum_schedule = min(circuit_indices_organised_by_schedule.keys())
         moments_to_return: list[cirq.Moment] = list()
         for circuit_index in circuit_indices_organised_by_schedule[minimum_schedule]:
             moment, _ = self._pop_scheduled_moment(circuit_index)
             moments_to_return.append(moment)
-        return moments_to_return
+        return minimum_schedule, moments_to_return
 
 
 def remove_duplicate_operations(
@@ -515,21 +534,23 @@ def remove_duplicate_operations(
     return final_operations
 
 
-def merge_scheduled_circuits(circuits: list[ScheduledCircuit]) -> cirq.Circuit:
-    """Merge several ScheduledCircuit instances into one cirq.Circuit instance
+def merge_scheduled_circuits(circuits: list[ScheduledCircuit]) -> ScheduledCircuit:
+    """Merge several ScheduledCircuit instances into one ScheduledCircuit instance
 
     This function takes several scheduled circuits as input and merge them,
-    respecting their schedules, into a unique cirq.Circuit instance that will
+    respecting their schedules, into a unique ScheduledCircuit instance that will
     then be returned to the caller.
 
     Returns:
-        a circuit representing the merged scheduled circuits given as input.
+        a scheduled circuit representing the merged scheduled circuits given as
+        input.
     """
     scheduled_circuits = ScheduledCircuits(circuits)
     all_moments: list[cirq.Moment] = list()
+    all_moments_schedule: list[int] = list()
 
     while scheduled_circuits.has_pending_moment():
-        moments = scheduled_circuits.collect_moments()
+        schedule, moments = scheduled_circuits.collect_moments()
         # Flatten the moments into a list of operations to perform some modifications
         operations = sum((list(moment.operations) for moment in moments), start=[])
         # Avoid duplicated operations. Any operation that have the Plaquette.get_mergeable_tag() tag
@@ -537,5 +558,6 @@ def merge_scheduled_circuits(circuits: list[ScheduledCircuit]) -> cirq.Circuit:
         # is considered equal (and has the mergeable tag).
         non_duplicated_operations = remove_duplicate_operations(operations)
         all_moments.append(cirq.Moment(*non_duplicated_operations))
-
-    return cirq.Circuit(all_moments)
+        if schedule != ScheduledCircuit.VIRTUAL_MOMENT_SCHEDULE:
+            all_moments_schedule.append(schedule)
+    return ScheduledCircuit(cirq.Circuit(all_moments), all_moments_schedule)

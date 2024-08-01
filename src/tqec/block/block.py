@@ -255,13 +255,15 @@ class StandardComputationBlock(ComputationBlock):
 
     @override
     def instantiate(self) -> cirq.Circuit:
-        circuit = generate_circuit(self.template, self.initial_plaquettes)
+        circuit = generate_circuit(self.template, self.initial_plaquettes).raw_circuit
         if self.repeating_plaquettes is not None:
             repetitions = self.repeating_plaquettes.number_of_rounds(self.template.k)
             plaquettes = self.repeating_plaquettes.plaquettes
-            inner_circuit = generate_circuit(self.template, plaquettes).freeze()
+            inner_circuit = generate_circuit(
+                self.template, plaquettes
+            ).raw_circuit.freeze()
             circuit += cirq.CircuitOperation(inner_circuit, repetitions=repetitions)
-        circuit += generate_circuit(self.template, self.final_plaquettes)
+        circuit += generate_circuit(self.template, self.final_plaquettes).raw_circuit
         return circuit
 
     @override
@@ -310,4 +312,4 @@ class Computation:
                 ScheduledCircuit(spatially_shifted_circuit, position.z)
             )
 
-        return merge_scheduled_circuits(instantiated_scheduled_blocks)
+        return merge_scheduled_circuits(instantiated_scheduled_blocks).raw_circuit
