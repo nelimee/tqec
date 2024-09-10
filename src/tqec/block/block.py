@@ -5,12 +5,13 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
-from typing_extensions import override
 
 import cirq
 import cirq.circuits
-from tqec.direction import Direction3D
+from typing_extensions import override
+
 from tqec.circuit.circuit import generate_circuit
+from tqec.direction import Direction3D
 from tqec.exceptions import TQECException
 from tqec.plaquette.library.empty import empty_square_plaquette
 from tqec.plaquette.plaquette import Plaquette, Plaquettes
@@ -154,6 +155,30 @@ class TemporalPlaquetteSequence:
         )
 
 
+_TEMPLATE_BOUNDARIES: dict[tuple[Direction3D, bool], list[TemplateSide]] = {
+    (Direction3D.X, True): [
+        TemplateSide.TOP,
+        TemplateSide.TOP_LEFT,
+        TemplateSide.TOP_RIGHT,
+    ],
+    (Direction3D.X, False): [
+        TemplateSide.BOTTOM,
+        TemplateSide.BOTTOM_LEFT,
+        TemplateSide.BOTTOM_RIGHT,
+    ],
+    (Direction3D.Y, True): [
+        TemplateSide.RIGHT,
+        TemplateSide.TOP_RIGHT,
+        TemplateSide.BOTTOM_RIGHT,
+    ],
+    (Direction3D.Y, False): [
+        TemplateSide.LEFT,
+        TemplateSide.TOP_LEFT,
+        TemplateSide.BOTTOM_LEFT,
+    ],
+}
+
+
 @dataclass
 class StandardComputationBlock(ComputationBlock):
     """This class implements what we call the "standard" computational block.
@@ -278,40 +303,11 @@ class StandardComputationBlock(ComputationBlock):
                 self.plaquettes.final_plaquettes = replacement.initial_plaquettes
             else:
                 self.plaquettes.initial_plaquettes = replacement.initial_plaquettes
-        if boundary == Direction3D.X:
-            if outgoing:
-                self._update_plaquettes(
-                    [TemplateSide.TOP, TemplateSide.TOP_LEFT, TemplateSide.TOP_RIGHT],
-                    replacement,
-                )
-            else:
-                self._update_plaquettes(
-                    [
-                        TemplateSide.BOTTOM,
-                        TemplateSide.BOTTOM_LEFT,
-                        TemplateSide.BOTTOM_RIGHT,
-                    ],
-                    replacement,
-                )
-        if boundary == Direction3D.Y:
-            if outgoing:
-                self._update_plaquettes(
-                    [
-                        TemplateSide.RIGHT,
-                        TemplateSide.TOP_RIGHT,
-                        TemplateSide.BOTTOM_RIGHT,
-                    ],
-                    replacement,
-                )
-            else:
-                self._update_plaquettes(
-                    [
-                        TemplateSide.LEFT,
-                        TemplateSide.TOP_LEFT,
-                        TemplateSide.BOTTOM_LEFT,
-                    ],
-                    replacement,
-                )
+        self._update_plaquettes(
+            _TEMPLATE_BOUNDARIES[(boundary, outgoing)],
+            _TEMPLATE_BOUNDARIES[(boundary, not outgoing)],
+            replacement,
+        )
 
     @override
     def instantiate(self) -> cirq.Circuit:
@@ -333,20 +329,29 @@ class StandardComputationBlock(ComputationBlock):
         self.template.scale_to(k)
 
     def _update_plaquettes(
-        self, sides: list[TemplateSide], replacement: StandardComputationBlock
+        self,
+        block_sides: list[TemplateSide],
+        pipe_sides: list[TemplateSide],
+        replacement: StandardComputationBlock,
     ) -> None:
         "Replaces plaquettes according to substitution rules."
-        for index in self.template.get_plaquette_indices_on_sides(sides):
-            self.plaquettes.initial_plaquettes[index] = replacement.initial_plaquettes[
-                index
+        block_plaquette_indices = self.template.get_plaquette_indices_on_sides(
+            block_sides
+        )
+        pipe_plaquette_indices = replacement.template.get_plaquette_indices_on_sides(
+            pipe_sides
+        )
+        for bindex, pindex in zip(block_plaquette_indices, pipe_plaquette_indices):
+            self.plaquettes.initial_plaquettes[bindex] = replacement.initial_plaquettes[
+                pindex
             ]
-            self.plaquettes.final_plaquettes[index] = replacement.initial_plaquettes[
-                index
+            self.plaquettes.final_plaquettes[bindex] = replacement.initial_plaquettes[
+                pindex
             ]
             if (
                 self.repeating_plaquettes is not None
                 and replacement.repeating_plaquettes is not None
             ):
-                self.repeating_plaquettes.plaquettes[index] = (
-                    replacement.repeating_plaquettes.plaquettes[index]
+                self.repeating_plaquettes.plaquettes[bindex] = (
+                    replacement.repeating_plaquettes.plaquettes[pindex]
                 )
